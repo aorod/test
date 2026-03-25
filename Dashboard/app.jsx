@@ -1,7 +1,70 @@
 const { useState, useMemo, useRef, useEffect } = React;
 
+// ── CLASSIFICAÇÃO DE FLUXO  (DAX → JS) ───────────────────────────────────────
+// Equivalente direto da medida "Classificacao Fluxo" do Power BI.
+// Sub-statuses sem prefixo numérico (já normalizados no data.js).
+const SUB_STATUS_CRITICOS = new Set([
+  'Desenvolvendo: Aguardando Build',
+  'Desenvolvendo: Backlog',
+  'Desenvolvendo: Desenvolvendo',
+  'Desenvolvendo: Despriorizado',
+  'Desenvolvendo: Devolvido',
+  'Desenvolvendo: Stand By',
+  'Testando: Fila de Testes',
+  'Testando: Testando',
+  'Testando: Validado',
+  'Testando: Validado (Aguardando Build)',
+  'Testando: Stand By',
+  'Finalizado: Beta [oculto]',
+  'Finalizado: Beta [restrito]',
+  'Finalizado: Doc Pós Deploy',
+  'Finalizado: Em Aprovação da Lj',
+  'Finalizado: Entregue',
+]);
+
+function calcClassificacaoFluxo(row) {
+  const subStatus = row.subStatus || '';
+  const rf        = row.requisitoFuncional || '';
+
+  // Fora dos sub-statuses críticos → sem necessidade de análise documental
+  if (!SUB_STATUS_CRITICOS.has(subStatus)) return 'Fluxo Normal Completo';
+
+  const semRF    = rf.trim() === '';
+  const rfUp     = rf.toUpperCase();
+  // SEARCH("EF", rf) > 0 / SEARCH("FIGMA", rf) > 0  (case-insensitive, igual ao DAX)
+  const temEF    = rfUp.includes('EF');
+  const temFIGMA = rfUp.includes('FIGMA');
+
+  if (semRF)              return 'Engenharia Reversa';       // sem documentação
+  if (temEF && temFIGMA)  return 'Fluxo Normal Completo';   // documentação completa
+  if (temEF || temFIGMA)  return 'Fluxo Normal Incompleto'; // documentação parcial
+  return 'Engenharia Reversa';                               // conteúdo não reconhecido
+}
+
+// ── STATUS EF / FIGMA  (DAX → JS) ────────────────────────────────────────────
+// Equivalente direto da medida "Status EF/FIGMA" do Power BI.
+// CONTAINSSTRING(UPPER(...)) → .toUpperCase().includes(...)
+// TRIM → .trim()
+function calcStatusEFFIGMA(row) {
+  const campo  = (row.requisitoFuncional || '').trim();
+  const campoU = campo.toUpperCase();
+  const temEF    = campoU.includes('EF');
+  const temFIGMA = campoU.includes('FIGMA');
+
+  if (campo === '')      return 'Requisito e Figma Não Entregues';
+  if (temEF && temFIGMA) return 'Requisito e Figma Entregues';
+  if (temEF)             return 'Requisito Entregue';
+  if (temFIGMA)          return 'Figma Entregue';
+  return 'Doc Anexado'; // tem conteúdo, mas sem EF nem FIGMA reconhecidos
+}
+
 // ── DATA ─────────────────────────────────────────────────────────────────────
-const rawData = typeof REAL_DATA !== 'undefined' ? REAL_DATA : [];
+const rawData = (typeof REAL_DATA !== 'undefined' ? REAL_DATA : [])
+  .map(r => ({
+    ...r,
+    classificacaoFluxo: calcClassificacaoFluxo(r),
+    statusEFFIGMA:      calcStatusEFFIGMA(r),
+  }));
 
 // ── COLOR MAPS (hex para suportar transparência inline) ────────────────────
 const STATE_COLORS = {
@@ -23,6 +86,20 @@ const ENTREGA_COLORS = {
   'Apenas FIGMA':         '#f59e0b',
   'Não Entregue':         '#ef4444',
   'Não Iniciado':         '#64748b',
+};
+
+const STATUS_EF_FIGMA_COLORS = {
+  'Requisito e Figma Entregues':     '#22c55e', // verde   → completo
+  'Requisito Entregue':              '#3b82f6', // azul    → só EF
+  'Figma Entregue':                  '#f59e0b', // âmbar   → só FIGMA
+  'Doc Anexado':                     '#a855f7', // roxo    → conteúdo não reconhecido
+  'Requisito e Figma Não Entregues': '#ef4444', // vermelho → vazio
+};
+
+const FLUXO_COLORS = {
+  'Fluxo Normal Completo':   '#22c55e', // verde  → documentação completa
+  'Fluxo Normal Incompleto': '#f59e0b', // âmbar  → documentação parcial
+  'Engenharia Reversa':      '#ef4444', // vermelho → sem documentação reconhecida
 };
 
 // ── ICONS ─────────────────────────────────────────────────────────────────────
@@ -116,6 +193,7 @@ const FILTER_DEFS = [
   { label: 'Entrega REQ / FIGMA',   key: 'entregaREQ'           },
   { label: 'Classificação de Fluxo',key: 'classificacaoFluxo'   },
   { label: 'Produto Controladoria', key: 'produtoControladoria' },
+  //{ label: 'Requisito',             key: 'requisitos'},
 ];
 
 function FiltersPanel({ filters, setFilters, data, onClose }) {
@@ -225,6 +303,7 @@ function ChartCard({ title, rows, colorMap }) {
 const TABLE_COLS = [
   { key: 'id',                   label: 'ID / Caso de Uso',  width: 220 },
   { key: 'state',                label: 'State',             width: 130 },
+  { key: 'url',                  label: 'URL',               width: 60  },
   { key: 'subStatus',            label: 'Sub Status',        width: 110 },
   { key: 'mes',                  label: 'Mês',               width: 70  },
   { key: 'entregaREQ',           label: 'Entrega REQ',       width: 170 },
@@ -234,7 +313,6 @@ const TABLE_COLS = [
   { key: 'pd',                   label: 'Designer',          width: 120 },
   { key: 'classificacaoFluxo',   label: 'Class. Fluxo',      width: 140 },
   { key: 'statusEFFIGMA',        label: 'Status EF/FIGMA',   width: 170 },
-  { key: 'url',                  label: 'URL',               width: 60  },
 ];
 
 function DataTable({ data }) {
@@ -259,9 +337,7 @@ function DataTable({ data }) {
     key, dir: s.key === key && s.dir === 'asc' ? 'desc' : 'asc'
   }));
 
-  const fluxoColor = f =>
-    f === 'Fluxo Normal'      ? '#06b6d4' :
-    f === 'Fluxo Alternativo' ? '#f97316' : '#a855f7';
+  const fluxoColor = f => FLUXO_COLORS[f] || '#64748b';
 
   const paginNumbers = () => {
     const nums = [];
@@ -328,9 +404,9 @@ function DataTable({ data }) {
                 </td>
                 <td>
                   <span className="tag-badge" style={{
-                    background: `${ENTREGA_COLORS[row.statusEFFIGMA] || '#64748b'}22`,
-                    color: ENTREGA_COLORS[row.statusEFFIGMA] || '#64748b',
-                    border: `1px solid ${ENTREGA_COLORS[row.statusEFFIGMA] || '#64748b'}44`,
+                    background: `${STATUS_EF_FIGMA_COLORS[row.statusEFFIGMA] || '#64748b'}22`,
+                    color: STATUS_EF_FIGMA_COLORS[row.statusEFFIGMA] || '#64748b',
+                    border: `1px solid ${STATUS_EF_FIGMA_COLORS[row.statusEFFIGMA] || '#64748b'}44`,
                   }}>{row.statusEFFIGMA}</span>
                 </td>
                 <td>
@@ -407,10 +483,35 @@ function App() {
     const naoEntregue = count('Não Entregue');
     const apenasREQ   = count('Apenas REQ');
     const apenasF     = count('Apenas FIGMA');
-    const fluxoN  = d.filter(r => r.classificacaoFluxo === 'Fluxo Normal').length;
-    const fluxoER = d.filter(r => r.classificacaoFluxo === 'Fluxo de Exceção').length;
-    return { total, entregue, naoEntregue, apenasREQ, apenasF, fluxoN, fluxoER, pct };
-  }, [filteredData]);
+    const fluxoCompleto   = d.filter(r => r.classificacaoFluxo === 'Fluxo Normal Completo').length;
+    const fluxoIncompleto = d.filter(r => r.classificacaoFluxo === 'Fluxo Normal Incompleto').length;
+    // FluxoN  = CALCULATE(COUNTROWS(...), [Classificacao Fluxo] = "Fluxo Normal Completo" || ... = "Fluxo Normal Incompleto")
+    const fluxoN          = d.filter(r =>
+      r.classificacaoFluxo === 'Fluxo Normal Completo' ||
+      r.classificacaoFluxo === 'Fluxo Normal Incompleto'
+    ).length;
+    // FluxoER = CALCULATE(COUNTROWS(...), [Classificacao Fluxo] = "Engenharia Reversa")
+    const fluxoER         = d.filter(r => r.classificacaoFluxo === 'Engenharia Reversa').length;
+    // REQ/FIGMA Entregue = CALCULATE(COUNTROWS(...), [Status EF/FIGMA] = "Requisito e Figma Entregues")
+    const reqFigmaEntregue    = d.filter(r => r.statusEFFIGMA === 'Requisito e Figma Entregues').length;
+    // REQ/FIGMA Não Entregue = CALCULATE(COUNTROWS(...), [Status EF/FIGMA] = "Requisito e Figma Não Entregues")
+    const reqFigmaNaoEntregue = d.filter(r => r.statusEFFIGMA === 'Requisito e Figma Não Entregues').length;
+    // REQ Entregue   = CALCULATE(COUNTROWS(...), [Status EF/FIGMA] = "Requisito Entregue")
+    const reqEntregue         = d.filter(r => r.statusEFFIGMA === 'Requisito Entregue').length;
+    // FIGMA Entregue = CALCULATE(COUNTROWS(...), [Status EF/FIGMA] = "Figma Entregue")
+    const figmaEntregue       = d.filter(r => r.statusEFFIGMA === 'Figma Entregue').length;
+    // DOC Anexado:
+    //   CalcularEntregas = COUNT(...) WHERE [Status EF/FIGMA] = "Doc Anexado"
+    //   FiltroAtivo = SELECTEDVALUE([Status EF/FIGMA], "Todos")
+    //   → Se o único valor selecionado no filtro for "Doc Anexado", retorna "--"
+    //     (evita exibir total trivial quando o filtro já garante 100% do contexto)
+    const docAnexadoCount  = d.filter(r => r.statusEFFIGMA === 'Doc Anexado').length;
+    const efFigmaFiltro    = filters.statusEFFIGMA || [];
+    const filtroAtivoDocAnexado =
+      efFigmaFiltro.length === 1 && efFigmaFiltro[0] === 'Doc Anexado'; // SELECTEDVALUE = "Doc Anexado"
+    const docAnexado = filtroAtivoDocAnexado ? '--' : docAnexadoCount;
+    return { total, entregue, naoEntregue, apenasREQ, apenasF, fluxoCompleto, fluxoIncompleto, fluxoN, fluxoER, reqFigmaEntregue, reqFigmaNaoEntregue, reqEntregue, figmaEntregue, docAnexado, docAnexadoCount, pct };
+  }, [filteredData, filters]);
 
   const stateDistrib = useMemo(() => {
     const counts = {};
@@ -422,6 +523,13 @@ function App() {
   const entregaDistrib = useMemo(() => {
     const counts = {};
     filteredData.forEach(r => { counts[r.entregaREQ] = (counts[r.entregaREQ] || 0) + 1; });
+    return Object.entries(counts).map(([status, count]) => ({ status, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [filteredData]);
+
+  const fluxoDistrib = useMemo(() => {
+    const counts = {};
+    filteredData.forEach(r => { counts[r.classificacaoFluxo] = (counts[r.classificacaoFluxo] || 0) + 1; });
     return Object.entries(counts).map(([status, count]) => ({ status, count }))
       .sort((a, b) => b.count - a.count);
   }, [filteredData]);
@@ -496,19 +604,27 @@ function App() {
 
           {/* KPIs */}
           <div className="kpi-grid">
-            <KPICard label="Total de CUs"    value={kpis.total}        color="#8b5cf6" icon={<BarChartIcon size={15} />}  subtitle="casos de uso" />
-            <KPICard label="Entregue"        value={kpis.entregue}     color="#22c55e" subtitle={`${kpis.pct(kpis.entregue)}% do total`}       pct={kpis.pct(kpis.entregue)} />
+            <KPICard label="Total de Caso de Uso"    value={kpis.total}        color="#8b5cf6" icon={<BarChartIcon size={15} />}  subtitle="casos de uso" />
+            <KPICard label="Entregue"        value={kpis.entregue}        color="#22c55e" subtitle={`${kpis.pct(kpis.entregue)}% do total`}          pct={kpis.pct(kpis.entregue)} />
+            <KPICard label="REQ + FIGMA"        value={kpis.reqFigmaEntregue}    color={STATUS_EF_FIGMA_COLORS['Requisito e Figma Entregues']}     subtitle="req e figma entregues"     pct={kpis.pct(kpis.reqFigmaEntregue)} />
+            <KPICard label="Sem REQ + FIGMA"    value={kpis.reqFigmaNaoEntregue} color={STATUS_EF_FIGMA_COLORS['Requisito e Figma Não Entregues']} subtitle="req e figma não entregues" pct={kpis.pct(kpis.reqFigmaNaoEntregue)} />
+            <KPICard label="REQ Entregue"       value={kpis.reqEntregue}   color={STATUS_EF_FIGMA_COLORS['Requisito Entregue']} subtitle="só requisito entregue" pct={kpis.pct(kpis.reqEntregue)} />
+            <KPICard label="FIGMA Entregue"     value={kpis.figmaEntregue} color={STATUS_EF_FIGMA_COLORS['Figma Entregue']}     subtitle="só figma entregue"     pct={kpis.pct(kpis.figmaEntregue)} />
+            <KPICard label="Doc Anexado"        value={kpis.docAnexado}    color={STATUS_EF_FIGMA_COLORS['Doc Anexado']}        subtitle="conteúdo não reconhecido" pct={kpis.docAnexado !== '--' ? kpis.pct(kpis.docAnexadoCount) : undefined} />
             <KPICard label="Não Entregue"    value={kpis.naoEntregue}  color="#ef4444" subtitle={`${kpis.pct(kpis.naoEntregue)}% do total`}    pct={kpis.pct(kpis.naoEntregue)} />
             <KPICard label="Apenas REQ"      value={kpis.apenasREQ}    color="#3b82f6" subtitle="REQ entregue"            pct={kpis.pct(kpis.apenasREQ)} />
             <KPICard label="Apenas FIGMA"    value={kpis.apenasF}      color="#f59e0b" subtitle="FIGMA entregue"          pct={kpis.pct(kpis.apenasF)} />
-            <KPICard label="Fluxo Normal"    value={kpis.fluxoN}       color="#06b6d4" subtitle="classificação"           pct={kpis.pct(kpis.fluxoN)} />
-            <KPICard label="Eng. Reversa"    value={kpis.fluxoER}      color="#f97316" subtitle="Fluxo de Exceção"        pct={kpis.pct(kpis.fluxoER)} />
+            <KPICard label="Fluxo Normal"      value={kpis.fluxoN}          color="#06b6d4"                                  subtitle="completo + incompleto" pct={kpis.pct(kpis.fluxoN)} />
+            <KPICard label="Fluxo Completo"   value={kpis.fluxoCompleto}   color={FLUXO_COLORS['Fluxo Normal Completo']}   subtitle="documentação completa" pct={kpis.pct(kpis.fluxoCompleto)} />
+            <KPICard label="Fluxo Incompleto" value={kpis.fluxoIncompleto} color={FLUXO_COLORS['Fluxo Normal Incompleto']} subtitle="documentação parcial"  pct={kpis.pct(kpis.fluxoIncompleto)} />
+            <KPICard label="Eng. Reversa"      value={kpis.fluxoER}         color={FLUXO_COLORS['Engenharia Reversa']}      subtitle="sem documentação"      pct={kpis.pct(kpis.fluxoER)} />
           </div>
 
           {/* Charts */}
           <div className="charts-grid">
-            <ChartCard title="Distribuição por State"          rows={stateDistrib}   colorMap={STATE_COLORS} />
+            <ChartCard title="Distribuição por State"         rows={stateDistrib}   colorMap={STATE_COLORS} />
             <ChartCard title="Status de Entrega REQ / FIGMA"  rows={entregaDistrib} colorMap={ENTREGA_COLORS} />
+            <ChartCard title="Classificação de Fluxo"         rows={fluxoDistrib}   colorMap={FLUXO_COLORS} />
           </div>
 
           {/* Table */}
