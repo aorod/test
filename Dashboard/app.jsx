@@ -383,6 +383,13 @@ function DataTable({ data }) {
                     <span className="status-dot" style={{ background: STATE_COLORS[row.state] || '#64748b' }} />
                     <span style={{ color: STATE_COLORS[row.state] || '#64748b', fontSize: 12 }}>{row.state}</span>
                   </span>
+                  <td>
+                  {row.url && (
+                    <a href={row.url} target="_blank" rel="noopener noreferrer" className="link-btn">
+                      <ExternalLinkIcon size={12} /> Ver
+                    </a>
+                  )}
+                </td>
                 </td>
                 <td className="cell-secondary">{row.subStatus}</td>
                 <td className="cell-muted">{row.mes}</td>
@@ -408,13 +415,6 @@ function DataTable({ data }) {
                     color: STATUS_EF_FIGMA_COLORS[row.statusEFFIGMA] || '#64748b',
                     border: `1px solid ${STATUS_EF_FIGMA_COLORS[row.statusEFFIGMA] || '#64748b'}44`,
                   }}>{row.statusEFFIGMA}</span>
-                </td>
-                <td>
-                  {row.url && (
-                    <a href={row.url} target="_blank" rel="noopener noreferrer" className="link-btn">
-                      <ExternalLinkIcon size={12} /> Ver
-                    </a>
-                  )}
                 </td>
               </tr>
             ))}
@@ -547,7 +547,7 @@ function App() {
             <BarChartIcon size={16} style={{ color: 'white' }} />
           </div>
           <div>
-            <div className="brand-name">USE CASE CONTROL</div>
+            <div className="brand-name">E&D CONTROLE CASO DE USO</div>
             <div className="brand-sub">Vector · Controladoria</div>
           </div>
         </div>
