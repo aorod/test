@@ -383,13 +383,13 @@ function DataTable({ data }) {
                     <span className="status-dot" style={{ background: STATE_COLORS[row.state] || '#64748b' }} />
                     <span style={{ color: STATE_COLORS[row.state] || '#64748b', fontSize: 12 }}>{row.state}</span>
                   </span>
-                  <td>
+                </td>
+                <td>
                   {row.url && (
                     <a href={row.url} target="_blank" rel="noopener noreferrer" className="link-btn">
                       <ExternalLinkIcon size={12} /> Ver
                     </a>
                   )}
-                </td>
                 </td>
                 <td className="cell-secondary">{row.subStatus}</td>
                 <td className="cell-muted">{row.mes}</td>
